@@ -54,6 +54,9 @@
     --mustard: #e8b84f;
     --sky: #88b8d4;
     --shadow: rgba(42, 36, 32, 0.15);
+    --noprep-bg: #3d3732;
+    --noprep-text: #d8d2c8;
+    --noprep-border: #2a2420;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -431,6 +434,15 @@
   }
   .cal-day.yes { background: var(--leaf); color: #fff; border-color: var(--leaf-dark); }
   .cal-day.no { background: var(--tomato); color: #fff; border-color: var(--tomato-dark); }
+  /* 作れない日（ブラック寄り） - いる/いらないより優先 */
+  .cal-day.noprep-day,
+  .cal-day.yes.noprep-day,
+  .cal-day.no.noprep-day {
+    background: var(--noprep-bg) !important;
+    color: var(--noprep-text) !important;
+    border-color: var(--noprep-border) !important;
+  }
+  .cal-day.noprep-day .mark { display: none; }
   .cal-day.bulk-selected {
     box-shadow: 0 0 0 3px var(--sky);
     transform: scale(0.95);
@@ -442,15 +454,12 @@
   }
   .cal-day .noprep-mark {
     position: absolute;
-    top: 1px;
-    left: 3px;
-    font-size: 10px;
-    font-weight: 900;
-    color: var(--tomato-dark);
+    top: 2px;
+    right: 3px;
+    font-size: 11px;
     line-height: 1;
+    filter: brightness(1.1);
   }
-  .cal-day.yes .noprep-mark,
-  .cal-day.no .noprep-mark { color: #fff; }
 
   /* 作れない日トグル */
   .noprep-toggle {
@@ -538,8 +547,17 @@
   .schedule-item.no { border-left: 6px solid var(--tomato); }
   .schedule-item.empty { border-left: 6px solid #ccc; opacity: 0.7; }
   .schedule-item.noprep {
-    border-left: 6px solid var(--tomato-dark) !important;
-    background: #fce8e6 !important;
+    border-left: 6px solid var(--noprep-border) !important;
+    background: var(--noprep-bg) !important;
+    color: var(--noprep-text) !important;
+  }
+  .schedule-item.noprep .schedule-status,
+  .schedule-item.noprep .schedule-status.yes,
+  .schedule-item.noprep .schedule-status.no,
+  .schedule-item.noprep .schedule-status.empty,
+  .schedule-item.noprep .schedule-date,
+  .schedule-item.noprep .schedule-date .day {
+    color: var(--noprep-text) !important;
   }
   .schedule-date {
     font-family: 'DotGothic16', monospace;
@@ -556,7 +574,7 @@
   .schedule-noprep-label {
     font-size: 11px;
     font-weight: 700;
-    color: var(--tomato-dark);
+    color: var(--noprep-text);
     margin-top: 2px;
   }
 
@@ -1181,9 +1199,10 @@ function renderCalendar(which) {
       cell.appendChild(mark);
     }
     if (pm && pm.unavailable) {
+      cell.classList.add('noprep-day');
       const np = document.createElement('span');
       np.className = 'noprep-mark';
-      np.textContent = '×';
+      np.textContent = '🍳';
       cell.appendChild(np);
     }
     cell.onclick = () => onCalCellClick(ds);
