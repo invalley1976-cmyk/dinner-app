@@ -14,6 +14,25 @@
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
 <link rel="icon" href="/icons/icon-192.png" type="image/png">
 
+<!-- Firebase SDK (modular, CDN) -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
+  import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
+  const firebaseConfig = {
+    apiKey: "AIzaSyAKcQ-qTA3KCIWUV1N2TZWahhVEaWn_mlI",
+    authDomain: "dinner-app-dd27f.firebaseapp.com",
+    projectId: "dinner-app-dd27f",
+    storageBucket: "dinner-app-dd27f.firebasestorage.app",
+    messagingSenderId: "1030430671207",
+    appId: "1:1030430671207:web:2e6b42bedd0bbd1e946fc2"
+  };
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const stateDoc = doc(db, "app", "state");
+  window.__fb = { db, stateDoc, setDoc, onSnapshot, getDoc };
+  window.dispatchEvent(new Event('firebase-ready'));
+</script>
+
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700;900&family=DotGothic16&display=swap');
 
@@ -383,6 +402,55 @@
     border-radius: 50%;
     border: 1px solid var(--ink);
   }
+  .cal-day .noprep-mark {
+    position: absolute;
+    top: 1px;
+    left: 3px;
+    font-size: 10px;
+    font-weight: 900;
+    color: var(--tomato-dark);
+    line-height: 1;
+  }
+  .cal-day.yes .noprep-mark,
+  .cal-day.no .noprep-mark { color: #fff; }
+
+  /* 親が作れない日の警告 */
+  .alert-card.noprep {
+    background: var(--mustard);
+    color: var(--ink);
+  }
+
+  /* 「この日は作れない」トグル */
+  .noprep-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--cream);
+    border: 1.5px solid var(--ink);
+    border-radius: 10px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 700;
+    user-select: none;
+  }
+  .noprep-toggle input { width: 18px; height: 18px; cursor: pointer; accent-color: var(--tomato); }
+  .noprep-toggle.on {
+    background: var(--tomato);
+    color: #fff;
+    border-color: var(--tomato-dark);
+  }
+  .schedule-item.noprep {
+    border-left: 6px solid var(--tomato-dark) !important;
+    background: #fce8e6 !important;
+  }
+  .schedule-noprep-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--tomato-dark);
+    margin-top: 2px;
+  }
 
   /* 日付詳細モーダル */
   .modal-overlay {
@@ -610,6 +678,10 @@
       <!-- 親からのメモ入力 -->
       <div class="section-title">娘へのメモを書く</div>
       <div class="card">
+        <label class="noprep-toggle" id="todayNoprepToggle">
+          <input type="checkbox" id="todayNoprepCheck" onchange="onTodayNoprepChange(event)">
+          <span>🍳 今日は作れない日にする</span>
+        </label>
         <label class="memo-label">💬 今日の献立や連絡事項など</label>
         <textarea id="parentMemoInput" rows="2" placeholder="例: 今日はハンバーグだよ!"></textarea>
         <button class="save-btn" onclick="saveParentMemo()">送る</button>
@@ -664,9 +736,7 @@ let state = {
   _lastUpdatedAt: 0
 };
 
-// ===== サーバーAPIストレージ =====
-const API_URL = '/api/state';
-
+// ===== Firestore ストレージ =====
 function setSyncStatus(msg, isError = false) {
   const el = document.getElementById('syncIndicator');
   if (!el) return;
@@ -674,18 +744,25 @@ function setSyncStatus(msg, isError = false) {
   el.classList.toggle('err', isError);
 }
 
+// Firebaseの準備完了を待つ
+function waitForFirebase() {
+  return new Promise((resolve) => {
+    if (window.__fb) return resolve();
+    window.addEventListener('firebase-ready', () => resolve(), { once: true });
+  });
+}
+
 async function loadState() {
   try {
-    const resp = await fetch(API_URL, { cache: 'no-store' });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const r = await resp.json();
-    if (r && r.value) {
-      const parsed = JSON.parse(r.value);
-      state.users = parsed.users || [];
-      state.schedule = parsed.schedule || {};
-      state.parentMemo = parsed.parentMemo || {};
-      state.urgentCancels = parsed.urgentCancels || [];
-      state._lastUpdatedAt = r.updatedAt || 0;
+    await waitForFirebase();
+    const { stateDoc, getDoc } = window.__fb;
+    const snap = await getDoc(stateDoc);
+    if (snap.exists()) {
+      const data = snap.data();
+      state.users = data.users || [];
+      state.schedule = data.schedule || {};
+      state.parentMemo = data.parentMemo || {};
+      state.urgentCancels = data.urgentCancels || [];
     }
     setSyncStatus('☁ 同期OK ' + new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'}));
   } catch (e) {
@@ -703,17 +780,13 @@ async function saveState() {
     users: state.users,
     schedule: state.schedule,
     parentMemo: state.parentMemo,
-    urgentCancels: state.urgentCancels
+    urgentCancels: state.urgentCancels,
+    updatedAt: Date.now()
   };
   try {
-    const resp = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const r = await resp.json();
-    state._lastUpdatedAt = r.updatedAt || Date.now();
+    await waitForFirebase();
+    const { stateDoc, setDoc } = window.__fb;
+    await setDoc(stateDoc, data);
     setSyncStatus('☁ 同期OK ' + new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'}));
   } catch(e) {
     setSyncStatus('⚠ 保存失敗(ネット確認)', true);
@@ -836,6 +909,20 @@ function renderAlerts() {
         <div class="alert-title">まだ回答してないよ!</div>
         <div class="alert-text">今日の晩ごはん、いるかいらないか<br>教えてね</div>
       </div>`;
+  }
+
+  // 娘画面: 親が今日作れない日のとき
+  if (state.role === 'child') {
+    const pmToday = state.parentMemo[today];
+    if (pmToday && pmToday.unavailable) {
+      const note = pmToday.text ? pmToday.text.replace(/</g,'&lt;').replace(/\n/g,'<br>') : '晩ごはんを自分で用意してね';
+      area.innerHTML += `
+        <div class="alert-card noprep">
+          <div class="alert-emoji">🍳</div>
+          <div class="alert-title">今日は親が作れない日だよ!</div>
+          <div class="alert-text">${note}</div>
+        </div>`;
+    }
   }
 
   if (state.role === 'parent') {
@@ -1016,6 +1103,13 @@ function renderCalendar() {
         cell.appendChild(dot);
       }
     }
+    const pm = state.parentMemo[ds];
+    if (pm && pm.unavailable) {
+      const np = document.createElement('span');
+      np.className = 'noprep-mark';
+      np.textContent = '×';
+      cell.appendChild(np);
+    }
     cell.onclick = () => openDayModal(ds);
     grid.appendChild(cell);
   }
@@ -1027,11 +1121,13 @@ function openDayModal(ds) {
   const wd = ['日','月','火','水','木','金','土'][d.getDay()];
   document.getElementById('modalDate').textContent = `${d.getMonth()+1}月${d.getDate()}日 (${wd})`;
   const entry = state.schedule[ds] || {};
+  const pm = state.parentMemo[ds] || {};
 
   const isPast = parseDate(ds) < new Date(new Date().setHours(0,0,0,0));
 
   const body = document.getElementById('modalBody');
   body.innerHTML = `
+    <div class="memo-label" style="margin-bottom:6px;">🧒 娘の回答</div>
     <div class="answer-buttons">
       <button class="answer-btn yes ${entry.answer==='yes'?'selected':''}" onclick="modalSelectAnswer('${ds}','yes')">
         <span class="emoji">🍽️</span>
@@ -1050,12 +1146,48 @@ function openDayModal(ds) {
         style="display:${entry.answer==='yes'?'block':'none'};"
         value="${(entry.request||'').replace(/"/g,'&quot;')}">
       ${entry.author ? `<div class="msg-author">最終更新: ${getUserName(entry.author)}</div>` : ''}
-      <button class="save-btn" onclick="modalSave('${ds}')">保存する</button>
+      <button class="save-btn" onclick="modalSave('${ds}')">娘の回答を保存</button>
       ${entry.answer ? `<button class="save-btn" style="background:#999;margin-top:6px;" onclick="modalDelete('${ds}')">この日の回答を消す</button>` : ''}
     </div>
+
+    <div style="margin-top:18px; padding-top:14px; border-top:1.5px dashed var(--leaf-dark);">
+      <div class="memo-label" style="margin-bottom:6px;">👨‍👩 親から</div>
+      <label class="noprep-toggle ${pm.unavailable?'on':''}" id="modalNoprepToggle">
+        <input type="checkbox" id="modalNoprepCheck" ${pm.unavailable?'checked':''} onchange="onModalNoprepChange(event)">
+        <span>🍳 この日は作れない</span>
+      </label>
+      <label class="memo-label">💬 献立・連絡メモ</label>
+      <textarea id="modalParentMemo" rows="2" placeholder="例: ハンバーグだよ">${(pm.text||'').replace(/</g,'&lt;')}</textarea>
+      <button class="save-btn" onclick="modalSaveParent('${ds}')">親の情報を保存</button>
+    </div>
+
     ${isPast ? '<div class="msg-author" style="margin-top:10px;">⚠️ 過去の日付です</div>' : ''}
   `;
   document.getElementById('dayModal').classList.add('show');
+}
+
+function onModalNoprepChange(ev) {
+  const toggle = document.getElementById('modalNoprepToggle');
+  toggle.classList.toggle('on', ev.target.checked);
+}
+
+async function modalSaveParent(ds) {
+  const text = document.getElementById('modalParentMemo').value.trim();
+  const unavailable = document.getElementById('modalNoprepCheck').checked;
+  if (!text && !unavailable) {
+    delete state.parentMemo[ds];
+  } else {
+    state.parentMemo[ds] = {
+      text,
+      unavailable,
+      author: state.currentUserId,
+      updatedAt: new Date().toISOString()
+    };
+  }
+  await saveState();
+  closeModal();
+  renderAll();
+  showToast(unavailable ? '🍳 作れない日で保存' : '親情報を保存したよ ✓');
 }
 
 function modalSelectAnswer(ds, ans) {
@@ -1128,6 +1260,15 @@ function renderParentView() {
 
   document.getElementById('parentMemoInput').value = (pm && pm.text) || '';
 
+  // 今日の「作れない」トグル状態反映
+  const noprepToggle = document.getElementById('todayNoprepToggle');
+  const noprepCheck = document.getElementById('todayNoprepCheck');
+  if (noprepToggle && noprepCheck) {
+    const isNoprep = !!(pm && pm.unavailable);
+    noprepCheck.checked = isNoprep;
+    noprepToggle.classList.toggle('on', isNoprep);
+  }
+
   const listEl = document.getElementById('scheduleList');
   listEl.innerHTML = '';
   for (let i = 0; i < 14; i++) {
@@ -1135,10 +1276,12 @@ function renderParentView() {
     d.setDate(d.getDate() + i);
     const ds = fmtDate(d);
     const e = state.schedule[ds];
+    const dayPm = state.parentMemo[ds];
     const weekday = ['日','月','火','水','木','金','土'][d.getDay()];
     const div = document.createElement('div');
     div.className = 'schedule-item ' + (e ? e.answer : 'empty');
     if (i === 0) div.classList.add('today');
+    if (dayPm && dayPm.unavailable) div.classList.add('noprep');
 
     let status = '<span class="schedule-status empty">未入力</span>';
     if (e) {
@@ -1148,8 +1291,12 @@ function renderParentView() {
     }
 
     let memoHtml = '';
+    if (dayPm && dayPm.unavailable) {
+      memoHtml += `<div class="schedule-noprep-label">🍳 作れない日</div>`;
+    }
     if (e && e.memo) memoHtml += `<div class="schedule-memo">📝 ${e.memo.replace(/</g,'&lt;')}</div>`;
     if (e && e.answer === 'yes' && e.request) memoHtml += `<div class="schedule-memo">🍤 ${e.request.replace(/</g,'&lt;')}</div>`;
+    if (dayPm && dayPm.text) memoHtml += `<div class="schedule-memo">💬 ${dayPm.text.replace(/</g,'&lt;')}</div>`;
 
     div.innerHTML = `
       <div class="schedule-date">
@@ -1170,17 +1317,44 @@ function renderParentView() {
 async function saveParentMemo() {
   const today = todayStr();
   const text = document.getElementById('parentMemoInput').value.trim();
-  if (!text) {
+  const existing = state.parentMemo[today] || {};
+  const unavailable = !!existing.unavailable;
+  if (!text && !unavailable) {
     delete state.parentMemo[today];
   } else {
     state.parentMemo[today] = {
       text,
+      unavailable,
       author: state.currentUserId,
       updatedAt: new Date().toISOString()
     };
   }
   await saveState();
   showToast('メモを送ったよ ✓');
+}
+
+async function onTodayNoprepChange(ev) {
+  const willBe = ev.target.checked;
+  const toggle = document.getElementById('todayNoprepToggle');
+  toggle.classList.toggle('on', willBe);
+
+  const today = todayStr();
+  const existing = state.parentMemo[today] || {};
+  const newText = (document.getElementById('parentMemoInput')?.value || existing.text || '').trim();
+  if (!willBe && !newText) {
+    delete state.parentMemo[today];
+  } else {
+    state.parentMemo[today] = {
+      text: newText,
+      unavailable: willBe,
+      author: state.currentUserId,
+      updatedAt: new Date().toISOString()
+    };
+  }
+  await saveState();
+  renderAlerts();
+  renderCalendar && renderCalendar();
+  showToast(willBe ? '🍳 作れない日にしたよ' : '✓ 解除したよ');
 }
 
 // ===== ユーザー管理 =====
@@ -1234,17 +1408,29 @@ async function removeUser(id) {
 }
 
 // 起動
-init();
-
-// 定期的にデータ再読み込み(家族の誰かが更新したら反映)
-setInterval(async () => {
-  const prev = JSON.stringify({s: state.schedule, p: state.parentMemo, u: state.urgentCancels});
-  try {
-    await loadState();
-  } catch(e) { return; }
-  const next = JSON.stringify({s: state.schedule, p: state.parentMemo, u: state.urgentCancels});
-  if (prev !== next) renderAll();
-}, 15000);
+init().then(() => {
+  // Firestore リアルタイム更新を購読(家族の誰かが変更したら即反映)
+  waitForFirebase().then(() => {
+    const { stateDoc, onSnapshot } = window.__fb;
+    onSnapshot(stateDoc, (snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+      const prev = JSON.stringify({s: state.schedule, p: state.parentMemo, u: state.urgentCancels, users: state.users});
+      state.users = data.users || [];
+      state.schedule = data.schedule || {};
+      state.parentMemo = data.parentMemo || {};
+      state.urgentCancels = data.urgentCancels || [];
+      const next = JSON.stringify({s: state.schedule, p: state.parentMemo, u: state.urgentCancels, users: state.users});
+      if (prev !== next) {
+        renderUserSelect();
+        renderAll();
+      }
+      setSyncStatus('☁ 同期OK ' + new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'}));
+    }, (err) => {
+      setSyncStatus('⚠ 同期エラー', true);
+    });
+  });
+});
 
 // Service Worker 登録
 if ('serviceWorker' in navigator) {
