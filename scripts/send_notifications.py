@@ -59,6 +59,29 @@ def send_fcm(token, title, body, data=None):
         token=token,
         notification=messaging.Notification(title=title, body=body),
         data={k: str(v) for k, v in (data or {}).items()},
+        # iOS (APNs) 向け: sound=default でデフォルトサウンド
+        apns=messaging.APNSConfig(
+            payload=messaging.APNSPayload(
+                aps=messaging.Aps(
+                    sound="default",
+                    badge=1,
+                ),
+            ),
+        ),
+        # Web Push 向け: バイブ・アイコン指定
+        webpush=messaging.WebpushConfig(
+            notification=messaging.WebpushNotification(
+                title=title,
+                body=body,
+                icon="/dinner-app/icons/icon-192.png",
+                badge="/dinner-app/icons/icon-192.png",
+                vibrate=[200, 100, 200],
+                require_interaction=False,
+            ),
+            fcm_options=messaging.WebpushFCMOptions(
+                link="https://invalley1976-cmyk.github.io/dinner-app/",
+            ),
+        ),
     )
     try:
         resp = messaging.send(msg)
