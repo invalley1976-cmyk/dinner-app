@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>今日の晩ごはん、いる?いらない?</title>
+
+<!-- PWA -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#e85a4f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="晩ごはん">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<link rel="icon" href="/icons/icon-192.png" type="image/png">
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700;900&family=DotGothic16&display=swap');
+
+  :root {
+    --cream: #faf6ef;
+    --ink: #2a2420;
+    --tomato: #e85a4f;
+    --tomato-dark: #c44237;
+    --leaf: #6b8e4e;
+    --leaf-dark: #4a6b35;
+    --mustard: #e8b84f;
+    --sky: #88b8d4;
+    --shadow: rgba(42, 36, 32, 0.15);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body, html {
+    font-family: 'Zen Maru Gothic', sans-serif;
+    color: var(--ink);
+    min-height: 100vh;
+    background: var(--cream);
+  }
+
+  .app-bg {
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at 20% 10%, rgba(232, 90, 79, 0.08) 0%, transparent 40%),
+      radial-gradient(circle at 80% 80%, rgba(107, 142, 78, 0.08) 0%, transparent 40%),
+      var(--cream);
+    padding: max(20px, env(safe-area-inset-top)) 16px max(80px, env(safe-area-inset-bottom));
+    position: relative;
+  }
+
+  .app-bg::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle at 1px 1px, rgba(42, 36, 32, 0.04) 1px, transparent 0);
+    background-size: 20px 20px;
+    pointer-events: none;
+  }
+
+  .container { max-width: 520px; margin: 0 auto; position: relative; z-index: 1; }
+
+  /* ヘッダー */
+  .header { text-align: center; margin-bottom: 16px; }
+  .header-emoji {
+    font-size: 42px;
+    display: inline-block;
+    transform: rotate(-6deg);
+    filter: drop-shadow(2px 3px 0 var(--shadow));
+  }
+  .title { font-size: 22px; font-weight: 900; letter-spacing: 0.02em; margin-top: 2px; }
+  .subtitle {
+    font-family: 'DotGothic16', monospace;
+    font-size: 11px;
+    color: var(--leaf-dark);
+    margin-top: 3px;
+    letter-spacing: 0.12em;
+  }
+
+  /* 役割タブ */
+  .role-switch {
+    display: flex;
+    gap: 6px;
+    background: #fff;
+    padding: 5px;
+    border-radius: 999px;
+    border: 2px solid var(--ink);
+    box-shadow: 3px 3px 0 var(--ink);
+    margin-bottom: 18px;
+  }
+  .role-btn {
+    flex: 1;
+    padding: 10px 4px;
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 13px;
+    border-radius: 999px;
+    cursor: pointer;
+    color: var(--ink);
+    transition: all 0.2s;
+  }
+  .role-btn.active { background: var(--ink); color: var(--cream); }
+
+  /* ユーザーセレクタ */
+  .user-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    border: 2px solid var(--ink);
+    border-radius: 12px;
+    padding: 8px 10px;
+    margin-bottom: 14px;
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+  .user-bar-label {
+    font-size: 12px;
+    font-family: 'DotGothic16', monospace;
+    color: var(--leaf-dark);
+  }
+  .user-bar select {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--ink);
+  }
+  .user-bar button {
+    border: 1.5px solid var(--ink);
+    background: var(--mustard);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-family: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* 同期インジケータ */
+  .sync-indicator {
+    font-family: 'DotGothic16', monospace;
+    font-size: 10px;
+    color: var(--leaf-dark);
+    text-align: center;
+    margin-bottom: 8px;
+    letter-spacing: 0.1em;
+    min-height: 14px;
+  }
+  .sync-indicator.err { color: var(--tomato-dark); }
+
+  /* アラート */
+  .alert-card {
+    background: var(--tomato);
+    color: #fff;
+    padding: 16px;
+    border-radius: 14px;
+    border: 2px solid var(--ink);
+    box-shadow: 4px 4px 0 var(--ink);
+    margin-bottom: 14px;
+    text-align: center;
+    animation: shake 0.6s ease-in-out;
+  }
+  .alert-card.urgent { background: var(--mustard); color: var(--ink); }
+  .alert-card.info { background: var(--sky); color: var(--ink); }
+
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+  }
+  .alert-emoji { font-size: 28px; }
+  .alert-title { font-size: 15px; font-weight: 900; margin: 4px 0; }
+  .alert-text { font-size: 12px; opacity: 0.95; line-height: 1.5; }
+  .alert-close {
+    margin-top: 8px;
+    padding: 5px 14px;
+    background: #fff;
+    color: var(--ink);
+    border: 2px solid var(--ink);
+    border-radius: 999px;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  /* セクションタイトル */
+  .section-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin: 16px 0 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-title::before {
+    content: '';
+    width: 12px;
+    height: 12px;
+    background: var(--mustard);
+    border: 2px solid var(--ink);
+    border-radius: 3px;
+    transform: rotate(-8deg);
+  }
+
+  /* カード共通 */
+  .card {
+    background: #fff;
+    border: 2px solid var(--ink);
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow: 4px 4px 0 var(--ink);
+    margin-bottom: 14px;
+  }
+
+  .today-date {
+    font-family: 'DotGothic16', monospace;
+    font-size: 11px;
+    color: var(--leaf-dark);
+    letter-spacing: 0.12em;
+  }
+  .today-question { font-size: 18px; font-weight: 900; margin: 6px 0 12px; line-height: 1.4; }
+
+  .answer-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .answer-btn {
+    padding: 14px 6px;
+    border: 2px solid var(--ink);
+    border-radius: 12px;
+    background: #fff;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    transition: transform 0.1s, box-shadow 0.1s;
+    box-shadow: 3px 3px 0 var(--ink);
+    color: var(--ink);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+  }
+  .answer-btn .emoji { font-size: 22px; }
+  .answer-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+  .answer-btn.yes.selected { background: var(--leaf); color: #fff; }
+  .answer-btn.no.selected { background: var(--tomato); color: #fff; }
+
+  /* メモ・リクエスト欄 */
+  .memo-section { margin-top: 12px; display: none; }
+  .memo-section.show { display: block; }
+  .memo-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--leaf-dark);
+    margin-bottom: 4px;
+    display: block;
+  }
+  textarea, input[type="text"] {
+    width: 100%;
+    border: 1.5px solid var(--ink);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-family: inherit;
+    font-size: 13px;
+    background: var(--cream);
+    color: var(--ink);
+    resize: vertical;
+    margin-bottom: 8px;
+  }
+  textarea:focus, input[type="text"]:focus {
+    outline: none;
+    background: #fff;
+    border-color: var(--tomato);
+  }
+
+  .save-btn {
+    width: 100%;
+    padding: 10px;
+    background: var(--ink);
+    color: var(--cream);
+    border: none;
+    border-radius: 10px;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+
+  /* 緊急ボタン */
+  .urgent-btn {
+    width: 100%;
+    margin-top: 10px;
+    padding: 12px;
+    background: var(--mustard);
+    border: 2px solid var(--ink);
+    border-radius: 10px;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    box-shadow: 3px 3px 0 var(--ink);
+    transition: transform 0.1s, box-shadow 0.1s;
+  }
+  .urgent-btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+
+  /* カレンダー */
+  .cal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .cal-nav {
+    width: 30px;
+    height: 30px;
+    border: 2px solid var(--ink);
+    background: var(--cream);
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .cal-month { font-size: 15px; font-weight: 900; }
+
+  .cal-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 3px;
+    margin-bottom: 5px;
+  }
+  .cal-weekday {
+    text-align: center;
+    font-family: 'DotGothic16', monospace;
+    font-size: 10px;
+    color: var(--leaf-dark);
+    padding: 3px 0;
+  }
+  .cal-weekday.sun { color: var(--tomato-dark); }
+  .cal-weekday.sat { color: var(--sky); }
+
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+
+  .cal-day {
+    aspect-ratio: 1;
+    border: 1.5px solid var(--ink);
+    background: var(--cream);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+    position: relative;
+    transition: transform 0.1s;
+  }
+  .cal-day:active:not(.empty) { transform: scale(0.94); }
+  .cal-day.empty { border: none; background: transparent; cursor: default; }
+  .cal-day.past { opacity: 0.45; }
+  .cal-day.today {
+    border-width: 2.5px;
+    box-shadow: 0 0 0 2px var(--mustard);
+  }
+  .cal-day.yes { background: var(--leaf); color: #fff; border-color: var(--leaf-dark); }
+  .cal-day.no { background: var(--tomato); color: #fff; border-color: var(--tomato-dark); }
+  .cal-day .mark {
+    position: absolute;
+    bottom: 2px;
+    font-size: 8px;
+  }
+  .cal-day .memo-dot {
+    position: absolute;
+    top: 2px;
+    right: 3px;
+    width: 5px;
+    height: 5px;
+    background: var(--mustard);
+    border-radius: 50%;
+    border: 1px solid var(--ink);
+  }
+
+  /* 日付詳細モーダル */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(42, 36, 32, 0.6);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 20px;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--cream);
+    border: 2px solid var(--ink);
+    border-radius: 16px;
+    padding: 20px;
+    max-width: 420px;
+    width: 100%;
+    box-shadow: 6px 6px 0 var(--ink);
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .modal-title { font-size: 16px; font-weight: 900; }
+  .modal-close {
+    border: 2px solid var(--ink);
+    background: #fff;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  /* 親メモ・リクエスト表示 */
+  .msg-box {
+    background: var(--cream);
+    border: 1.5px dashed var(--ink);
+    border-radius: 8px;
+    padding: 10px;
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .msg-box.request { background: #fff8e6; border-color: var(--mustard); }
+  .msg-box.parent { background: #e8f2ed; border-color: var(--leaf); }
+  .msg-box-label {
+    font-family: 'DotGothic16', monospace;
+    font-size: 10px;
+    color: var(--leaf-dark);
+    letter-spacing: 0.1em;
+    margin-bottom: 4px;
+  }
+  .msg-author {
+    font-size: 10px;
+    color: var(--leaf-dark);
+    margin-top: 4px;
+  }
+
+  /* 親画面の一覧 */
+  .schedule-list { display: flex; flex-direction: column; gap: 8px; }
+  .schedule-item {
+    background: #fff;
+    border: 1.5px solid var(--ink);
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 10px;
+    align-items: center;
+  }
+  .schedule-item.today { background: #fff8e6; border-width: 2px; }
+  .schedule-item.yes { border-left: 6px solid var(--leaf); }
+  .schedule-item.no { border-left: 6px solid var(--tomato); }
+  .schedule-item.empty { border-left: 6px solid #ccc; opacity: 0.7; }
+  .schedule-date {
+    font-family: 'DotGothic16', monospace;
+    font-size: 12px;
+    line-height: 1.3;
+    text-align: center;
+  }
+  .schedule-date .day { font-size: 18px; font-weight: 900; color: var(--ink); }
+  .schedule-content { font-size: 13px; }
+  .schedule-status { font-size: 12px; font-weight: 700; }
+  .schedule-status.yes { color: var(--leaf-dark); }
+  .schedule-status.no { color: var(--tomato-dark); }
+  .schedule-status.empty { color: #999; }
+  .schedule-memo {
+    font-size: 11px;
+    color: var(--leaf-dark);
+    margin-top: 2px;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 30px 20px;
+    color: var(--leaf-dark);
+    font-size: 13px;
+  }
+
+  .loading { text-align: center; padding: 40px; font-family: 'DotGothic16', monospace; color: var(--leaf-dark); }
+
+  .hidden { display: none !important; }
+
+  /* トースト */
+  .toast {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--ink);
+    color: var(--cream);
+    padding: 12px 20px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 700;
+    box-shadow: 3px 3px 0 rgba(0,0,0,0.3);
+    transition: transform 0.3s;
+    z-index: 200;
+    max-width: 90%;
+    text-align: center;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div class="app-bg">
+  <div class="container">
+
+    <!-- ヘッダー -->
+    <div class="header">
+      <div class="header-emoji">🍚</div>
+      <div class="title">今日の晩ごはん、いる?</div>
+      <div class="subtitle">DINNER CHECK APP</div>
+    </div>
+
+    <!-- 同期状態 -->
+    <div class="sync-indicator" id="syncIndicator">読み込み中…</div>
+
+    <!-- ユーザー切り替え -->
+    <div class="user-bar">
+      <span class="user-bar-label">👤</span>
+      <select id="userSelect"></select>
+      <button onclick="openUserManage()">管理</button>
+    </div>
+
+    <!-- 役割タブ -->
+    <div class="role-switch">
+      <button class="role-btn active" data-role="child" onclick="switchRole('child')">🧒 娘の画面</button>
+      <button class="role-btn" data-role="parent" onclick="switchRole('parent')">👨‍👩 親の画面</button>
+    </div>
+
+    <!-- アラート表示エリア -->
+    <div id="alertArea"></div>
+
+    <!-- ===== 娘画面 ===== -->
+    <div id="childView">
+      <!-- 今日のカード -->
+      <div class="card">
+        <div class="today-date" id="todayDate"></div>
+        <div class="today-question">きょうの晩ごはん、いる?</div>
+        <div class="answer-buttons">
+          <button class="answer-btn yes" data-answer="yes" onclick="selectAnswer('yes')">
+            <span class="emoji">🍽️</span>
+            <span>いる</span>
+          </button>
+          <button class="answer-btn no" data-answer="no" onclick="selectAnswer('no')">
+            <span class="emoji">🙅</span>
+            <span>いらない</span>
+          </button>
+        </div>
+
+        <!-- メモ・リクエスト -->
+        <div class="memo-section" id="memoSection">
+          <label class="memo-label">📝 メモ(遅くなる・友達連れてくる等)</label>
+          <textarea id="memoInput" rows="2" placeholder="例: 19時すぎに帰るよ"></textarea>
+          <label class="memo-label" id="requestLabel">🍤 リクエスト(食べたいもの)</label>
+          <input type="text" id="requestInput" placeholder="例: からあげ食べたい!">
+          <button class="save-btn" onclick="saveTodayAnswer()">保存する</button>
+        </div>
+
+        <!-- 親からのメモ表示 -->
+        <div id="parentMsgBox"></div>
+
+        <!-- 緊急ボタン -->
+        <button class="urgent-btn" onclick="sendUrgentCancel()">⚡ 緊急!やっぱりいらない連絡</button>
+      </div>
+
+      <!-- カレンダー -->
+      <div class="section-title">これからの予定をいれる</div>
+      <div class="card">
+        <div class="cal-header">
+          <button class="cal-nav" onclick="changeMonth(-1)">‹</button>
+          <div class="cal-month" id="calMonth"></div>
+          <button class="cal-nav" onclick="changeMonth(1)">›</button>
+        </div>
+        <div class="cal-weekdays">
+          <div class="cal-weekday sun">日</div>
+          <div class="cal-weekday">月</div>
+          <div class="cal-weekday">火</div>
+          <div class="cal-weekday">水</div>
+          <div class="cal-weekday">木</div>
+          <div class="cal-weekday">金</div>
+          <div class="cal-weekday sat">土</div>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+      </div>
+    </div>
+
+    <!-- ===== 親画面 ===== -->
+    <div id="parentView" class="hidden">
+      <!-- 今日の状況 -->
+      <div class="section-title">今日の状況</div>
+      <div class="card" id="parentTodayCard"></div>
+
+      <!-- 親からのメモ入力 -->
+      <div class="section-title">娘へのメモを書く</div>
+      <div class="card">
+        <label class="memo-label">💬 今日の献立や連絡事項など</label>
+        <textarea id="parentMemoInput" rows="2" placeholder="例: 今日はハンバーグだよ!"></textarea>
+        <button class="save-btn" onclick="saveParentMemo()">送る</button>
+      </div>
+
+      <!-- これからの予定一覧 -->
+      <div class="section-title">これからの予定(14日間)</div>
+      <div class="schedule-list" id="scheduleList"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 日付詳細モーダル -->
+<div class="modal-overlay" id="dayModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modalDate"></div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<!-- ユーザー管理モーダル -->
+<div class="modal-overlay" id="userModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">家族メンバー管理</div>
+      <button class="modal-close" onclick="closeUserModal()">✕</button>
+    </div>
+    <div id="userList"></div>
+    <label class="memo-label" style="margin-top:12px;">新しいメンバーを追加</label>
+    <input type="text" id="newUserInput" placeholder="例: お母さん">
+    <button class="save-btn" onclick="addUser()">追加する</button>
+  </div>
+</div>
+
+<!-- トースト -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== 状態管理 =====
+let state = {
+  users: [],
+  currentUserId: null,
+  role: 'child',
+  schedule: {},
+  parentMemo: {},
+  urgentCancels: [],
+  calView: new Date(),
+  _lastUpdatedAt: 0
+};
+
+// ===== サーバーAPIストレージ =====
+const API_URL = '/api/state';
+
+function setSyncStatus(msg, isError = false) {
+  const el = document.getElementById('syncIndicator');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.toggle('err', isError);
+}
+
+async function loadState() {
+  try {
+    const resp = await fetch(API_URL, { cache: 'no-store' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const r = await resp.json();
+    if (r && r.value) {
+      const parsed = JSON.parse(r.value);
+      state.users = parsed.users || [];
+      state.schedule = parsed.schedule || {};
+      state.parentMemo = parsed.parentMemo || {};
+      state.urgentCancels = parsed.urgentCancels || [];
+      state._lastUpdatedAt = r.updatedAt || 0;
+    }
+    setSyncStatus('☁ 同期OK ' + new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'}));
+  } catch (e) {
+    setSyncStatus('⚠ オフライン', true);
+    throw e;
+  }
+  try {
+    const u = localStorage.getItem('dinner_current_user');
+    if (u) state.currentUserId = u;
+  } catch(e) {}
+}
+
+async function saveState() {
+  const data = {
+    users: state.users,
+    schedule: state.schedule,
+    parentMemo: state.parentMemo,
+    urgentCancels: state.urgentCancels
+  };
+  try {
+    const resp = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const r = await resp.json();
+    state._lastUpdatedAt = r.updatedAt || Date.now();
+    setSyncStatus('☁ 同期OK ' + new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'}));
+  } catch(e) {
+    setSyncStatus('⚠ 保存失敗(ネット確認)', true);
+    showToast('保存エラー: ' + e.message);
+  }
+}
+
+function saveCurrentUser() {
+  try { localStorage.setItem('dinner_current_user', state.currentUserId); } catch(e) {}
+}
+
+// ===== ユーティリティ =====
+function fmtDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function parseDate(s) {
+  const [y,m,d] = s.split('-').map(Number);
+  return new Date(y, m-1, d);
+}
+function todayStr() { return fmtDate(new Date()); }
+function getCurrentUser() {
+  return state.users.find(u => u.id === state.currentUserId);
+}
+function getUserName(id) {
+  const u = state.users.find(x => x.id === id);
+  return u ? u.name : '不明';
+}
+function uuid() { return 'u_' + Math.random().toString(36).slice(2,10); }
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ===== 初期化 =====
+async function init() {
+  try {
+    await loadState();
+  } catch(e) {
+    // ネット失敗時は空状態で起動(後で再試行)
+  }
+
+  // ユーザーが一人もいない場合、初期ユーザーを作る
+  if (state.users.length === 0) {
+    state.users = [
+      { id: uuid(), name: '娘' },
+      { id: uuid(), name: 'お母さん' }
+    ];
+    state.currentUserId = state.users[0].id;
+    await saveState();
+    saveCurrentUser();
+  }
+  if (!state.currentUserId || !state.users.find(u => u.id === state.currentUserId)) {
+    state.currentUserId = state.users[0].id;
+    saveCurrentUser();
+  }
+
+  renderUserSelect();
+  renderAll();
+}
+
+function renderUserSelect() {
+  const sel = document.getElementById('userSelect');
+  sel.innerHTML = '';
+  state.users.forEach(u => {
+    const opt = document.createElement('option');
+    opt.value = u.id;
+    opt.textContent = u.name;
+    if (u.id === state.currentUserId) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  sel.onchange = () => {
+    state.currentUserId = sel.value;
+    saveCurrentUser();
+    renderAll();
+  };
+}
+
+function renderAll() {
+  renderAlerts();
+  if (state.role === 'child') {
+    document.getElementById('childView').classList.remove('hidden');
+    document.getElementById('parentView').classList.add('hidden');
+    renderTodayCard();
+    renderCalendar();
+  } else {
+    document.getElementById('childView').classList.add('hidden');
+    document.getElementById('parentView').classList.remove('hidden');
+    renderParentView();
+  }
+}
+
+// ===== 役割切り替え =====
+function switchRole(role) {
+  state.role = role;
+  document.querySelectorAll('.role-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.role === role);
+  });
+  renderAll();
+}
+
+// ===== アラート =====
+function renderAlerts() {
+  const area = document.getElementById('alertArea');
+  area.innerHTML = '';
+  const now = new Date();
+  const hour = now.getHours();
+  const today = todayStr();
+
+  if (state.role === 'child' && hour >= 12 && !state.schedule[today]) {
+    area.innerHTML += `
+      <div class="alert-card">
+        <div class="alert-emoji">⏰</div>
+        <div class="alert-title">まだ回答してないよ!</div>
+        <div class="alert-text">今日の晩ごはん、いるかいらないか<br>教えてね</div>
+      </div>`;
+  }
+
+  if (state.role === 'parent') {
+    const unseen = state.urgentCancels.filter(u => !u.seen);
+    unseen.forEach(u => {
+      const when = new Date(u.at);
+      const timeStr = `${when.getHours()}:${String(when.getMinutes()).padStart(2,'0')}`;
+      area.innerHTML += `
+        <div class="alert-card urgent">
+          <div class="alert-emoji">⚡</div>
+          <div class="alert-title">緊急!今日の晩ごはんいらない連絡</div>
+          <div class="alert-text">${getUserName(u.author)}さんから ${timeStr} に連絡</div>
+          <button class="alert-close" onclick="markUrgentSeen('${u.at}')">確認した</button>
+        </div>`;
+    });
+
+    if (hour >= 12 && !state.schedule[today]) {
+      area.innerHTML += `
+        <div class="alert-card info">
+          <div class="alert-emoji">❓</div>
+          <div class="alert-title">今日の分がまだ未回答です</div>
+          <div class="alert-text">娘さんからの回答を待っています</div>
+        </div>`;
+    }
+  }
+}
+
+async function markUrgentSeen(at) {
+  const u = state.urgentCancels.find(x => x.at === at);
+  if (u) {
+    u.seen = true;
+    await saveState();
+    renderAll();
+  }
+}
+
+// ===== 今日カード(娘画面) =====
+function renderTodayCard() {
+  const now = new Date();
+  const wd = ['日','月','火','水','木','金','土'][now.getDay()];
+  document.getElementById('todayDate').textContent =
+    `${now.getFullYear()}.${now.getMonth()+1}.${now.getDate()} (${wd})`;
+
+  const today = todayStr();
+  const entry = state.schedule[today];
+
+  document.querySelectorAll('#childView .answer-btn').forEach(b => b.classList.remove('selected'));
+  const memoSection = document.getElementById('memoSection');
+
+  if (entry) {
+    document.querySelector(`#childView .answer-btn[data-answer="${entry.answer}"]`).classList.add('selected');
+    document.getElementById('memoInput').value = entry.memo || '';
+    document.getElementById('requestInput').value = entry.request || '';
+    document.getElementById('requestLabel').style.display = entry.answer === 'yes' ? 'block' : 'none';
+    document.getElementById('requestInput').style.display = entry.answer === 'yes' ? 'block' : 'none';
+    memoSection.classList.add('show');
+  } else {
+    memoSection.classList.remove('show');
+    document.getElementById('memoInput').value = '';
+    document.getElementById('requestInput').value = '';
+  }
+
+  const pm = state.parentMemo[today];
+  const pmBox = document.getElementById('parentMsgBox');
+  if (pm && pm.text) {
+    pmBox.innerHTML = `
+      <div class="msg-box parent">
+        <div class="msg-box-label">💬 ${getUserName(pm.author)}さんから</div>
+        ${pm.text.replace(/</g,'&lt;').replace(/\n/g,'<br>')}
+      </div>`;
+  } else {
+    pmBox.innerHTML = '';
+  }
+}
+
+function selectAnswer(ans) {
+  const today = todayStr();
+  const existing = state.schedule[today] || {};
+  state.schedule[today] = {
+    ...existing,
+    answer: ans,
+    memo: existing.memo || '',
+    request: existing.request || '',
+    author: state.currentUserId,
+    updatedAt: new Date().toISOString()
+  };
+  document.querySelectorAll('#childView .answer-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelector(`#childView .answer-btn[data-answer="${ans}"]`).classList.add('selected');
+  document.getElementById('memoSection').classList.add('show');
+  document.getElementById('requestLabel').style.display = ans === 'yes' ? 'block' : 'none';
+  document.getElementById('requestInput').style.display = ans === 'yes' ? 'block' : 'none';
+  saveState().then(() => showToast(ans === 'yes' ? 'いる!で保存したよ' : 'いらないで保存したよ'));
+  renderAlerts();
+}
+
+async function saveTodayAnswer() {
+  const today = todayStr();
+  if (!state.schedule[today]) {
+    showToast('まず「いる」か「いらない」を選んでね');
+    return;
+  }
+  state.schedule[today].memo = document.getElementById('memoInput').value.trim();
+  state.schedule[today].request = document.getElementById('requestInput').value.trim();
+  state.schedule[today].author = state.currentUserId;
+  state.schedule[today].updatedAt = new Date().toISOString();
+  await saveState();
+  showToast('保存したよ ✓');
+}
+
+// ===== 緊急キャンセル =====
+async function sendUrgentCancel() {
+  if (!confirm('親に「今日の晩ごはんいらない」と緊急連絡を送りますか?')) return;
+  const today = todayStr();
+  state.schedule[today] = {
+    answer: 'no',
+    memo: (state.schedule[today]?.memo || '') + ' [緊急キャンセル]',
+    request: '',
+    author: state.currentUserId,
+    updatedAt: new Date().toISOString()
+  };
+  state.urgentCancels.push({
+    date: today,
+    author: state.currentUserId,
+    at: new Date().toISOString(),
+    seen: false
+  });
+  await saveState();
+  showToast('⚡ 親に連絡したよ');
+  renderAll();
+}
+
+// ===== カレンダー =====
+function changeMonth(delta) {
+  state.calView.setMonth(state.calView.getMonth() + delta);
+  renderCalendar();
+}
+
+function renderCalendar() {
+  const y = state.calView.getFullYear();
+  const m = state.calView.getMonth();
+  document.getElementById('calMonth').textContent = `${y}年 ${m+1}月`;
+
+  const first = new Date(y, m, 1);
+  const startWeekday = first.getDay();
+  const daysInMonth = new Date(y, m+1, 0).getDate();
+  const today = todayStr();
+  const todayDate = new Date();
+  todayDate.setHours(0,0,0,0);
+
+  const grid = document.getElementById('calGrid');
+  grid.innerHTML = '';
+
+  for (let i = 0; i < startWeekday; i++) {
+    const d = document.createElement('div');
+    d.className = 'cal-day empty';
+    grid.appendChild(d);
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const d = new Date(y, m, day);
+    const ds = fmtDate(d);
+    const entry = state.schedule[ds];
+    const cell = document.createElement('div');
+    cell.className = 'cal-day';
+    if (d < todayDate) cell.classList.add('past');
+    if (ds === today) cell.classList.add('today');
+    if (entry) cell.classList.add(entry.answer);
+
+    cell.innerHTML = `<span>${day}</span>`;
+    if (entry) {
+      const mark = document.createElement('span');
+      mark.className = 'mark';
+      mark.textContent = entry.answer === 'yes' ? '○' : '✕';
+      cell.appendChild(mark);
+      if (entry.memo || entry.request) {
+        const dot = document.createElement('span');
+        dot.className = 'memo-dot';
+        cell.appendChild(dot);
+      }
+    }
+    cell.onclick = () => openDayModal(ds);
+    grid.appendChild(cell);
+  }
+}
+
+// ===== 日付詳細モーダル =====
+function openDayModal(ds) {
+  const d = parseDate(ds);
+  const wd = ['日','月','火','水','木','金','土'][d.getDay()];
+  document.getElementById('modalDate').textContent = `${d.getMonth()+1}月${d.getDate()}日 (${wd})`;
+  const entry = state.schedule[ds] || {};
+
+  const isPast = parseDate(ds) < new Date(new Date().setHours(0,0,0,0));
+
+  const body = document.getElementById('modalBody');
+  body.innerHTML = `
+    <div class="answer-buttons">
+      <button class="answer-btn yes ${entry.answer==='yes'?'selected':''}" onclick="modalSelectAnswer('${ds}','yes')">
+        <span class="emoji">🍽️</span>
+        <span>いる</span>
+      </button>
+      <button class="answer-btn no ${entry.answer==='no'?'selected':''}" onclick="modalSelectAnswer('${ds}','no')">
+        <span class="emoji">🙅</span>
+        <span>いらない</span>
+      </button>
+    </div>
+    <div style="margin-top:14px;">
+      <label class="memo-label">📝 メモ</label>
+      <textarea id="modalMemo" rows="2" placeholder="例: 塾の後ちょっと遅くなる">${(entry.memo||'').replace(/</g,'&lt;')}</textarea>
+      <label class="memo-label" id="modalRequestLabel" style="display:${entry.answer==='yes'?'block':'none'};">🍤 リクエスト</label>
+      <input type="text" id="modalRequest" placeholder="例: ハンバーグがいい"
+        style="display:${entry.answer==='yes'?'block':'none'};"
+        value="${(entry.request||'').replace(/"/g,'&quot;')}">
+      ${entry.author ? `<div class="msg-author">最終更新: ${getUserName(entry.author)}</div>` : ''}
+      <button class="save-btn" onclick="modalSave('${ds}')">保存する</button>
+      ${entry.answer ? `<button class="save-btn" style="background:#999;margin-top:6px;" onclick="modalDelete('${ds}')">この日の回答を消す</button>` : ''}
+    </div>
+    ${isPast ? '<div class="msg-author" style="margin-top:10px;">⚠️ 過去の日付です</div>' : ''}
+  `;
+  document.getElementById('dayModal').classList.add('show');
+}
+
+function modalSelectAnswer(ds, ans) {
+  const existing = state.schedule[ds] || {};
+  state.schedule[ds] = {
+    ...existing,
+    answer: ans,
+    memo: existing.memo || '',
+    request: existing.request || '',
+    author: state.currentUserId,
+    updatedAt: new Date().toISOString()
+  };
+  openDayModal(ds);
+}
+
+async function modalSave(ds) {
+  if (!state.schedule[ds]) {
+    showToast('まず「いる」か「いらない」を選んでね');
+    return;
+  }
+  state.schedule[ds].memo = document.getElementById('modalMemo').value.trim();
+  const reqEl = document.getElementById('modalRequest');
+  state.schedule[ds].request = reqEl ? reqEl.value.trim() : '';
+  state.schedule[ds].author = state.currentUserId;
+  state.schedule[ds].updatedAt = new Date().toISOString();
+  await saveState();
+  closeModal();
+  renderAll();
+  showToast('保存したよ ✓');
+}
+
+async function modalDelete(ds) {
+  if (!confirm('この日の回答を消しますか?')) return;
+  delete state.schedule[ds];
+  await saveState();
+  closeModal();
+  renderAll();
+  showToast('削除したよ');
+}
+
+function closeModal() {
+  document.getElementById('dayModal').classList.remove('show');
+}
+
+// ===== 親画面 =====
+function renderParentView() {
+  const today = todayStr();
+  const entry = state.schedule[today];
+  const pm = state.parentMemo[today];
+
+  const card = document.getElementById('parentTodayCard');
+  const now = new Date();
+  const wd = ['日','月','火','水','木','金','土'][now.getDay()];
+  let html = `<div class="today-date">${now.getFullYear()}.${now.getMonth()+1}.${now.getDate()} (${wd})</div>`;
+  if (entry) {
+    const label = entry.answer === 'yes' ? '🍽️ いる' : '🙅 いらない';
+    const color = entry.answer === 'yes' ? 'var(--leaf)' : 'var(--tomato)';
+    html += `<div class="today-question" style="color:${color};">${label}</div>`;
+    if (entry.memo) {
+      html += `<div class="msg-box"><div class="msg-box-label">📝 メモ</div>${entry.memo.replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>`;
+    }
+    if (entry.answer === 'yes' && entry.request) {
+      html += `<div class="msg-box request"><div class="msg-box-label">🍤 リクエスト</div>${entry.request.replace(/</g,'&lt;')}</div>`;
+    }
+    html += `<div class="msg-author" style="margin-top:8px;">入力者: ${getUserName(entry.author)}</div>`;
+  } else {
+    html += `<div class="today-question" style="color:#999;">まだ未回答</div>`;
+  }
+  card.innerHTML = html;
+
+  document.getElementById('parentMemoInput').value = (pm && pm.text) || '';
+
+  const listEl = document.getElementById('scheduleList');
+  listEl.innerHTML = '';
+  for (let i = 0; i < 14; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    const ds = fmtDate(d);
+    const e = state.schedule[ds];
+    const weekday = ['日','月','火','水','木','金','土'][d.getDay()];
+    const div = document.createElement('div');
+    div.className = 'schedule-item ' + (e ? e.answer : 'empty');
+    if (i === 0) div.classList.add('today');
+
+    let status = '<span class="schedule-status empty">未入力</span>';
+    if (e) {
+      status = e.answer === 'yes'
+        ? '<span class="schedule-status yes">いる 🍽️</span>'
+        : '<span class="schedule-status no">いらない 🙅</span>';
+    }
+
+    let memoHtml = '';
+    if (e && e.memo) memoHtml += `<div class="schedule-memo">📝 ${e.memo.replace(/</g,'&lt;')}</div>`;
+    if (e && e.answer === 'yes' && e.request) memoHtml += `<div class="schedule-memo">🍤 ${e.request.replace(/</g,'&lt;')}</div>`;
+
+    div.innerHTML = `
+      <div class="schedule-date">
+        <div class="day">${d.getDate()}</div>
+        <div>${d.getMonth()+1}月${weekday}</div>
+      </div>
+      <div class="schedule-content">
+        ${status}
+        ${memoHtml}
+      </div>
+      <div></div>
+    `;
+    div.onclick = () => openDayModal(ds);
+    listEl.appendChild(div);
+  }
+}
+
+async function saveParentMemo() {
+  const today = todayStr();
+  const text = document.getElementById('parentMemoInput').value.trim();
+  if (!text) {
+    delete state.parentMemo[today];
+  } else {
+    state.parentMemo[today] = {
+      text,
+      author: state.currentUserId,
+      updatedAt: new Date().toISOString()
+    };
+  }
+  await saveState();
+  showToast('メモを送ったよ ✓');
+}
+
+// ===== ユーザー管理 =====
+function openUserManage() {
+  renderUserList();
+  document.getElementById('userModal').classList.add('show');
+}
+
+function closeUserModal() {
+  document.getElementById('userModal').classList.remove('show');
+}
+
+function renderUserList() {
+  const el = document.getElementById('userList');
+  el.innerHTML = '<div class="memo-label">登録メンバー</div>';
+  state.users.forEach(u => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;align-items:center;padding:8px;background:#fff;border:1.5px solid var(--ink);border-radius:8px;margin-bottom:6px;';
+    row.innerHTML = `
+      <span style="flex:1;font-weight:700;">${u.name.replace(/</g,'&lt;')}</span>
+      ${state.users.length > 1 ? `<button style="border:1.5px solid var(--ink);background:var(--tomato);color:#fff;border-radius:6px;padding:4px 10px;font-size:11px;font-family:inherit;font-weight:700;cursor:pointer;" onclick="removeUser('${u.id}')">削除</button>` : ''}
+    `;
+    el.appendChild(row);
+  });
+}
+
+async function addUser() {
+  const name = document.getElementById('newUserInput').value.trim();
+  if (!name) { showToast('名前を入れてね'); return; }
+  state.users.push({ id: uuid(), name });
+  await saveState();
+  document.getElementById('newUserInput').value = '';
+  renderUserList();
+  renderUserSelect();
+  showToast(name + 'さんを追加したよ');
+}
+
+async function removeUser(id) {
+  if (state.users.length <= 1) { showToast('最低1人は必要だよ'); return; }
+  const u = state.users.find(x => x.id === id);
+  if (!confirm((u?.name || '') + 'さんを削除しますか?')) return;
+  state.users = state.users.filter(x => x.id !== id);
+  if (state.currentUserId === id) {
+    state.currentUserId = state.users[0].id;
+    saveCurrentUser();
+  }
+  await saveState();
+  renderUserList();
+  renderUserSelect();
+  renderAll();
+}
+
+// 起動
+init();
+
+// 定期的にデータ再読み込み(家族の誰かが更新したら反映)
+setInterval(async () => {
+  const prev = JSON.stringify({s: state.schedule, p: state.parentMemo, u: state.urgentCancels});
+  try {
+    await loadState();
+  } catch(e) { return; }
+  const next = JSON.stringify({s: state.schedule, p: state.parentMemo, u: state.urgentCancels});
+  if (prev !== next) renderAll();
+}, 15000);
+
+// Service Worker 登録
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+  });
+}
+</script>
+</body>
+</html>
