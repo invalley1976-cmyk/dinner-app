@@ -1583,9 +1583,8 @@ function updateNotifBanner() {
   }
 }
 
-// VAPID 公開鍵は Firebase Console → Cloud Messaging → Web設定 で取得して下記に貼る
-// （未設定でも他機能は動作する）
-const VAPID_KEY = ""; // TODO: ペーストする
+// VAPID 公開鍵（Firebase Console → Cloud Messaging → ウェブプッシュ証明書で生成）
+const VAPID_KEY = "BNzAxsZErEHg4Qq9RZKCBCEa17sR4-GkR0leZ4KE-BI1h7SnaxyQSbULjpki5xejTt-R2SrfqfG-R6iFpZp2EbU";
 
 async function requestNotifPermission() {
   if (!('Notification' in window)) { showToast('このブラウザは通知非対応'); return; }
