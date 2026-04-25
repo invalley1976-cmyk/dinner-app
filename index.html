@@ -18,6 +18,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
   import { getFirestore, doc, setDoc, onSnapshot, getDoc } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-auth.js";
   import { getMessaging, getToken, onMessage, isSupported } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-messaging.js";
   const firebaseConfig = {
     apiKey: "AIzaSyAKcQ-qTA3KCIWUV1N2TZWahhVEaWn_mlI",
@@ -29,13 +30,24 @@
   };
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
+  const auth = getAuth(app);
   const stateDoc = doc(db, "app", "state");
   // FCM (optional - isSupported() returns false on unsupported browsers/iOS<16.4)
   let messaging = null;
   try {
     if (await isSupported()) messaging = getMessaging(app);
   } catch(e) {}
-  window.__fb = { db, stateDoc, setDoc, onSnapshot, getDoc, messaging, getToken, onMessage };
+  // 匿名認証で自動サインイン(永続)
+  let authReadyResolve;
+  const authReady = new Promise(r => { authReadyResolve = r; });
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      authReadyResolve(user);
+    } else {
+      signInAnonymously(auth).catch((e) => console.error('anon sign-in failed', e));
+    }
+  });
+  window.__fb = { db, stateDoc, setDoc, onSnapshot, getDoc, auth, authReady, messaging, getToken, onMessage };
   window.dispatchEvent(new Event('firebase-ready'));
 </script>
 
@@ -856,9 +868,15 @@ function setSyncStatus(msg, isError = false) {
 }
 
 function waitForFirebase() {
-  return new Promise((resolve) => {
-    if (window.__fb) return resolve();
-    window.addEventListener('firebase-ready', () => resolve(), { once: true });
+  return new Promise(async (resolve) => {
+    if (!window.__fb) {
+      await new Promise(r => window.addEventListener('firebase-ready', r, { once: true }));
+    }
+    // 匿名サインイン完了を待つ
+    if (window.__fb.authReady) {
+      try { await window.__fb.authReady; } catch(e) {}
+    }
+    resolve();
   });
 }
 
